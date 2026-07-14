@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import matplotlib.pyplot as plt
+import os
 
 # ตั้งค่าหน้าเว็บ
 st.set_page_config(
@@ -12,29 +13,75 @@ st.set_page_config(
     layout="wide"
 )
 
-# โหลดโมเดล
+# ==========================================
+# 🔍 Debug: ตรวจสอบไฟล์ในโฟลเดอร์
+# ==========================================
+st.sidebar.header("🔍 Debug Information")
+st.sidebar.write(f"**Working Directory:** {os.getcwd()}")
+st.sidebar.write(f"**ไฟล์ในโฟลเดอร์:**")
+for file in os.listdir('.'):
+    size = os.path.getsize(file)
+    st.sidebar.write(f"  - {file} ({size} bytes)")
+
+# ==========================================
+# 📂 โหลดโมเดล (พร้อมจัดการ error)
+# ==========================================
+MODEL_FILE = 'heart_disease_model.pkl'
+FEATURE_FILE = 'feature_info.pkl'
+
 @st.cache_resource
 def load_model():
-    return joblib.load('heart_disease_model.pkl')
+    """โหลดโมเดลพร้อมตรวจสอบ"""
+    if not os.path.exists(MODEL_FILE):
+        raise FileNotFoundError(f"ไม่พบไฟล์ {MODEL_FILE}")
+    
+    # ตรวจสอบว่าเป็น Git LFS pointer หรือไม่
+    with open(MODEL_FILE, 'r', encoding='utf-8', errors='ignore') as f:
+        first_line = f.readline()
+        if 'version https://git-lfs.github.com' in first_line:
+            raise RuntimeError(
+                f"ไฟล์ {MODEL_FILE} เป็น Git LFS pointer ไม่ใช่ไฟล์จริง!\n"
+                "กรุณาดาวน์โหลดไฟล์จริงจาก GitHub หรือสร้างใหม่ในเครื่อง"
+            )
+    
+    return joblib.load(MODEL_FILE)
 
 @st.cache_resource
 def load_feature_info():
-    return joblib.load('feature_info.pkl')
+    """โหลดข้อมูล features"""
+    if not os.path.exists(FEATURE_FILE):
+        raise FileNotFoundError(f"ไม่พบไฟล์ {FEATURE_FILE}")
+    return joblib.load(FEATURE_FILE)
 
+# ==========================================
+# 🚀 โหลดโมเดลและจัดการ Error
+# ==========================================
 try:
     model = load_model()
     feature_info = load_feature_info()
-except:
-    st.error("❌ ไม่พบไฟล์โมเดล กรุณาอัพโหลดไฟล์ heart_disease_model.pkl และ feature_info.pkl")
+    model_loaded = True
+except Exception as e:
+    model_loaded = False
+    st.error(f"❌ เกิดข้อผิดพลาดในการโหลดโมเดล:")
+    st.error(str(e))
+    st.info("💡 **วิธีแก้:**")
+    st.markdown("""
+    1. ตรวจสอบว่ามีไฟล์ `heart_disease_model.pkl` และ `feature_info.pkl` ในโฟลเดอร์เดียวกันกับ `app.py`
+    2. ถ้า clone จาก GitHub ให้ดาวน์โหลดไฟล์ .pkl จริง (ไม่ใช่ Git LFS pointer)
+    3. หรือรันโค้ดสร้างโมเดลใหม่ในเครื่องนี้
+    """)
     st.stop()
 
-# Header
+# ==========================================
+# 🎨 UI ส่วนหลัก
+# ==========================================
 st.title("🫀 ระบบทำนายความเสี่ยงโรคหัวใจ")
 st.markdown("---")
 
 # Sidebar
 with st.sidebar:
-    st.header("📊 ข้อมูลโมเดล")
+    st.header(" ข้อมูลโมเดล")
+    st.success("✅ โมเดลโหลดสำเร็จ!")
     st.write("**Algorithm:** Decision Tree")
     st.write("**Features:** 11 features")
     st.write("**Accuracy:** ~85%")
@@ -61,8 +108,7 @@ with col2:
     st_slope = st.selectbox("ความชัน ST segment", [0, 1, 2])
 
 # ปุ่มทำนาย
-if st.button("🔍 ทำนายผล", type="primary", use_container_width=True):
-    # สร้าง DataFrame
+if st.button(" ทำนายผล", type="primary", use_container_width=True):
     input_data = pd.DataFrame({
         'Age': [age],
         'Sex': [sex],
@@ -77,13 +123,11 @@ if st.button("🔍 ทำนายผล", type="primary", use_container_width=T
         'ST_Slope': [st_slope]
     })
     
-    # ทำนาย
     prediction = model.predict(input_data)[0]
     probability = model.predict_proba(input_data)[0]
     
-    # แสดงผล
     st.markdown("---")
-    st.subheader(" ผลการทำนาย")
+    st.subheader("🎯 ผลการทำนาย")
     
     if prediction == 1:
         st.error(f"""
@@ -100,7 +144,7 @@ if st.button("🔍 ทำนายผล", type="primary", use_container_width=T
         **คำแนะนำ:** รักษาสุขภาพและตรวจสุขภาพประจำปี
         """)
     
-    # แสดงกราฟความน่าจะเป็น
+    # แสดงกราฟ
     fig, ax = plt.subplots()
     categories = ['ไม่มีโรค', 'มีโรค']
     colors = ['#84fab0', '#fa709a']

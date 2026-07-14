@@ -1,0 +1,110 @@
+# app.py - Heart Disease Prediction Web App
+import streamlit as st
+import pandas as pd
+import numpy as np
+import joblib
+import matplotlib.pyplot as plt
+
+# ตั้งค่าหน้าเว็บ
+st.set_page_config(
+    page_title="Heart Disease Prediction",
+    page_icon="🫀",
+    layout="wide"
+)
+
+# โหลดโมเดล
+@st.cache_resource
+def load_model():
+    return joblib.load('heart_disease_model.pkl')
+
+@st.cache_resource
+def load_feature_info():
+    return joblib.load('feature_info.pkl')
+
+try:
+    model = load_model()
+    feature_info = load_feature_info()
+except:
+    st.error("❌ ไม่พบไฟล์โมเดล กรุณาอัพโหลดไฟล์ heart_disease_model.pkl และ feature_info.pkl")
+    st.stop()
+
+# Header
+st.title("🫀 ระบบทำนายความเสี่ยงโรคหัวใจ")
+st.markdown("---")
+
+# Sidebar
+with st.sidebar:
+    st.header("📊 ข้อมูลโมเดล")
+    st.write("**Algorithm:** Decision Tree")
+    st.write("**Features:** 11 features")
+    st.write("**Accuracy:** ~85%")
+    st.markdown("---")
+
+# Main Content
+st.subheader("📝 กรอกข้อมูลสุขภาพ")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    age = st.number_input("อายุ (Age)", min_value=20, max_value=100, value=50)
+    sex = st.selectbox("เพศ (Sex)", [0, 1], format_func=lambda x: "ชาย (1)" if x == 1 else "หญิง (0)")
+    chest_pain = st.selectbox("ประเภทอาการเจ็บหน้าอก", [0, 1, 2, 3, 4])
+    resting_bp = st.number_input("ความดันโลหิต (RestingBP)", min_value=80, max_value=200, value=120)
+    cholesterol = st.number_input("คอเลสเตอรอล (Cholesterol)", min_value=100, max_value=600, value=200)
+    fasting_bs = st.selectbox("น้ำตาลในเลือด > 120 mg/dl", [0, 1], format_func=lambda x: "ใช่ (1)" if x == 1 else "ไม่ใช่ (0)")
+
+with col2:
+    resting_ecg = st.selectbox("ผล ECG", [0, 1, 2])
+    max_hr = st.number_input("อัตราการเต้นหัวใจสูงสุด (MaxHR)", min_value=60, max_value=220, value=140)
+    exercise_angina = st.selectbox("เจ็บหน้าอกเมื่อออกกำลังกาย", [0, 1], format_func=lambda x: "ใช่ (1)" if x == 1 else "ไม่ใช่ (0)")
+    oldpeak = st.number_input("ST depression", min_value=0.0, max_value=10.0, value=1.0, step=0.1)
+    st_slope = st.selectbox("ความชัน ST segment", [0, 1, 2])
+
+# ปุ่มทำนาย
+if st.button("🔍 ทำนายผล", type="primary", use_container_width=True):
+    # สร้าง DataFrame
+    input_data = pd.DataFrame({
+        'Age': [age],
+        'Sex': [sex],
+        'ChestPainType': [chest_pain],
+        'RestingBP': [resting_bp],
+        'Cholesterol': [cholesterol],
+        'FastingBS': [fasting_bs],
+        'RestingECG': [resting_ecg],
+        'MaxHR': [max_hr],
+        'ExerciseAngina': [exercise_angina],
+        'Oldpeak': [oldpeak],
+        'ST_Slope': [st_slope]
+    })
+    
+    # ทำนาย
+    prediction = model.predict(input_data)[0]
+    probability = model.predict_proba(input_data)[0]
+    
+    # แสดงผล
+    st.markdown("---")
+    st.subheader(" ผลการทำนาย")
+    
+    if prediction == 1:
+        st.error(f"""
+        ### ⚠️ มีความเสี่ยงเป็นโรคหัวใจ
+        **ความมั่นใจ:** {probability[1]*100:.2f}%
+        
+        **คำแนะนำ:** ควรปรึกษาแพทย์เพื่อตรวจเพิ่มเติม
+        """)
+    else:
+        st.success(f"""
+        ### ✅ ไม่พบความเสี่ยงโรคหัวใจ
+        **ความมั่นใจ:** {probability[0]*100:.2f}%
+        
+        **คำแนะนำ:** รักษาสุขภาพและตรวจสุขภาพประจำปี
+        """)
+    
+    # แสดงกราฟความน่าจะเป็น
+    fig, ax = plt.subplots()
+    categories = ['ไม่มีโรค', 'มีโรค']
+    colors = ['#84fab0', '#fa709a']
+    ax.bar(categories, probability, color=colors)
+    ax.set_ylabel('Probability')
+    ax.set_ylim(0, 1)
+    st.pyplot(fig)
